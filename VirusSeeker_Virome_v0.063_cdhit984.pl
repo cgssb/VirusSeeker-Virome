@@ -34,7 +34,7 @@ my $normal = "\e[0m";
 This script will run the Metagenomic pipeline use Slurm Workload Manager.
 
 Pipeline version: $version
-$yellow		Usage: perl $0 <sample_folder><ref genome> <step_number> [workdir] $normal
+$yellow		Usage: perl $0 <sample_folder> <ref genome> <step_number> [workdir] $normal
 
 <sample_folder> = full path of the folder holding files for the sample
 <ref genome> = 1. Human genome
@@ -148,7 +148,7 @@ my $cdhit_parameter = " -c $cdhit_cutoff -n 8 -G 0 -aS $cdhit_cutoff -g 1 -r 1 -
 my $repeat_masker = "RepeatMasker";
 my $blastn = "blastn";
 my $blastx = "blastx";
-my $prinseq = "/opt/apps/prinseq/0.20.4/prinseq-lite.pl";
+my $prinseq = "prinseq-lite.pl";
 my $Tantan = "tantan ";
 my $bwa = "bwa";
 my $samtools = "samtools";
@@ -1941,7 +1941,6 @@ sub pool_split_for_BlastN{
 	if (!$step_number) {
 		print STCH "#SBATCH --depend=afterok:$last_jobid\n";
 	}
-	print STCH "SAMPLE_DIR=".$sample_dir."\n";
 	print STCH "BLASTN_NT_DIR=".$BLASTN_NT_dir."\n";
 	print STCH "MegaBLAST_DIR=".$MegaBLAST_dir_NT."\n";
 	print STCH "MegaBLAST_Filtered_fa=".$sample_name.".VIRUSDB_HIT_MegaBLAST_NT_Filtered.fa\n\n";
