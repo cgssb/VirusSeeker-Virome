@@ -1211,7 +1211,7 @@ sub parse_MegaBLAST_RefGenome {
 		print STCH "#SBATCH --depend=afterok:$last_jobid\n";
 	}
 	print STCH "#SBATCH --array=1-$file_number_of_MegaBLAST_host\n";
-	print STCH "module load bio-perl\n";
+	print STCH "module load bio-perl/1.007002\n";
 	print STCH "Ref_DIR=$MegaBLAST_dir_host\n";
 	print STCH "MegaBlastOUT=${sample_name}.RepeatMasker.goodSeq.RefGenome.unmapped.masked.fasta_file".'${SLURM_ARRAY_TASK_ID}',".MegaBLAST.out\n"; # name only, not full path
 	print STCH "MegaBlastIN=$MegaBLAST_dir_host/${sample_name}.RepeatMasker.goodSeq.RefGenome.unmapped.masked.fasta_file".'${SLURM_ARRAY_TASK_ID}',".fasta\n";
@@ -1420,7 +1420,7 @@ sub parse_BLASTN_VIRUSDB {
 		print STCH "#SBATCH --depend=afterok:$last_jobid\n";
 	}
 	print STCH "#SBATCH --array=1-$file_number_of_BLASTN_VIRUSDB\n";
-	print STCH "module load bio-perl\n";
+	print STCH "module load bio-perl/1.007002\n";
 	print STCH "BLASTN_VIRUSDB_DIR=".${workdir}."/".$sample_name.$BLASTN_VIRUSDB_DIR_SUFFIX."\n";
 	print STCH "BlastNOUT=",$sample_name.".RefGenomeFiltered.fa_file".'${SLURM_ARRAY_TASK_ID}',".blastnv.out\n";#name only, not full path
 	print STCH "BlastNIN=",'${BLASTN_VIRUSDB_DIR}',"/",$sample_name.".RefGenomeFiltered.fa_file".'${SLURM_ARRAY_TASK_ID}',".fasta\n";#full path
@@ -1630,7 +1630,7 @@ sub parse_BLASTX_VIRUSDB {
 	if (!$step_number) {
 		print STCH "#SBATCH --depend=afterok:$last_jobid\n";
 	}
-	print STCH "module load bio-perl\n";
+	print STCH "module load bio-perl/1.007002\n";
 #	print STCH "set -x\n";
 	print STCH "VIRUS_DIR=".${workdir}."/".$sample_name.$BLASTX_VIRUSDB_DIR_SUFFIX."\n";
 	print STCH "BLASTX_VIRUSDB_OUT=",$sample_name.".BLASTN_VIRUSDB_Filtered.fa_file".'${SLURM_ARRAY_TASK_ID}',".BLASTX_VIRUSDB.out\n"; #name only, not full path
@@ -1979,7 +1979,7 @@ sub parse_MegaBLAST_NT{
 		print STCH "#SBATCH --depend=afterok:$last_jobid\n";
 	}
 	print STCH "#SBATCH --array=1-$file_number_of_MegaBLAST_NT\n";
-	print STCH "module load bio-perl\n";
+	print STCH "module load bio-perl/1.007002\n";
 	print STCH "BLAST_DIR=".$MegaBLAST_dir_NT."\n";
 	print STCH "QUERY=\${BLAST_DIR}/".$sample_name."_VIRUSDB_HIT_Bacteria_unmapped_masked.fasta_file".'${SLURM_ARRAY_TASK_ID}'.".fasta\n";
 	print STCH "BlastOUT=".$sample_name."_VIRUSDB_HIT_Bacteria_unmapped_masked.fasta_file".'${SLURM_ARRAY_TASK_ID}',".megablast.out\n"; #name only, not full path
@@ -2165,7 +2165,7 @@ sub parse_BLASTN{
 	if (!$step_number) {
 		print STCH "#SBATCH --depend=afterok:$last_jobid\n";
 	}
-	print STCH "module load bio-perl\n";
+	print STCH "module load bio-perl/1.007002\n";
 	print STCH "BN_DIR=".$BLASTN_NT_dir."\n";
 	print STCH "BlastNOUT=",$sample_name.".VIRUSDB_HIT_MegaBLAST_NT_Filtered.fa_file".'${SLURM_ARRAY_TASK_ID}',".blastn.out\n";#name only, not full path
 	print STCH "BlastNIN=",'${BN_DIR}',"/",$sample_name.".VIRUSDB_HIT_MegaBLAST_NT_Filtered.fa_file".'${SLURM_ARRAY_TASK_ID}',".fasta\n";#full path
@@ -2346,7 +2346,7 @@ sub parse_BLASTX{
 	if (!$step_number) {
 		print STCH "#SBATCH --depend=afterok:$last_jobid\n";
 	}
-	print STCH "module load bio-perl\n";
+	print STCH "module load bio-perl/1.007002\n";
 	print STCH "BX_DIR=".$BLASTX_NR_dir."\n";
 	print STCH "BlastXOUT=",$sample_name."_BLASTN_NT_Filtered.fa_file".'${SLURM_ARRAY_TASK_ID}',".blastx.out\n";#name only, not full path
 	print STCH "BlastXIN=",'${BX_DIR}',"/".$sample_name."_BLASTN_NT_Filtered.fa_file".'${SLURM_ARRAY_TASK_ID}',".fasta\n";
@@ -2400,7 +2400,7 @@ sub generate_assignment_report{
 	if (!$step_number) {
 		print STCH "#SBATCH --depend=afterok:$last_jobid\n";
 	}
-	print STCH "module load bio-perl perl-modules\n";
+	print STCH "module load bio-perl/1.007002\n";
 	print STCH "set -x\n";
 	print STCH "SAMPLE_DIR=".${workdir}."\n";
 	print STCH "REPORT=".${workdir}."/".$sample_name.".AssignmentReport\n";
@@ -2479,8 +2479,7 @@ sub generate_phage_report{
 	if (!$step_number) {
 		print STCH "#SBATCH --depend=afterok:$last_jobid\n";
 	}
-	print STCH "module load perl-modules\n";
-	print STCH "module load bio-perl\n";
+	print STCH "module load bio-perl/1.007002\n";
 	print STCH "set -x\n";
 	print STCH "SAMPLE_DIR=".${workdir}."\n";
 	print STCH "REPORT=".${workdir}."/".$sample_name.".PhageAssignmentReport\n";
