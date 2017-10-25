@@ -1997,7 +1997,7 @@ sub submit_job_array_BLASTN{
 	$current_job_file1 = "j30_".$sample_name."_BN.sh";
 	open(STCH, ">$job_files_dir/$current_job_file1") or die $!;
 	print STCH "#!/bin/bash\n";         
-	print STCH "#SBATCH --mem=48G\n";
+	print STCH "#SBATCH --mem=4G\n";
 	print STCH "#SBATCH --cpus-per-task=6\n";
 	print STCH "#SBATCH --array=1-$file_number_of_BLASTN\n";
 	print STCH "#SBATCH --error=".$SLURM_files_dir."/".$current_job_file1.".%A_%a.error \n";
@@ -2165,7 +2165,7 @@ sub submit_job_array_BLASTX{
 	$current_job_file1 = "j33_".$sample_name."_BX.sh";
 	open(STCH, ">$job_files_dir/$current_job_file1") or die $!;
 	print STCH "#!/bin/bash\n";  
-	print STCH "#SBATCH --mem=8G\n";
+	print STCH "#SBATCH --mem=4G\n";
 	print STCH "#SBATCH --cpus-per-task=8\n";
 	print STCH "#SBATCH --array=1-$file_number_of_BLASTX\n";
 	print STCH "#SBATCH --error=".$SLURM_files_dir."/".$current_job_file1.".%A_%a.error\n";
