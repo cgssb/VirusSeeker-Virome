@@ -27,7 +27,7 @@ my $usage = "
 This script will drive the execution of the pipeline 
 for every sample in the given directory.
 
-perl $0 <script to be run> <run folder> <ref genome><use checkpointing><step>
+perl $0 <script to be run> <run folder> <ref genome> <step>
 <script to be run> = name of the script to be run
 <run folder> = full path of the folder holding files for this sequence run
                without the last \"/\"
@@ -36,7 +36,6 @@ perl $0 <script to be run> <run folder> <ref genome><use checkpointing><step>
                3. Worm (C. elegans, C. briggsae)
                4. Worm (C. brenneri)
                5. Mouse lemur (Microcebus_murinus)
-<use checkpointing> = 1. yes, 0. no
 
 <step_number> = [1..36] run this pipeline step by step. (running the whole pipeline if step number is 0)
 $red	[1] Remove Adapter
@@ -91,8 +90,8 @@ $normal
 
 ";
 
-die $usage unless scalar @ARGV == 5;
-my ( $script, $dir, $ref_genome, $use_checkpoint, $step ) = @ARGV;
+die $usage unless scalar @ARGV == 4;
+my ( $script, $dir, $ref_genome, $step ) = @ARGV;
 
 # change parameters based on which machine this script is running on
 my $HOME = $ENV{HOME};
@@ -108,7 +107,7 @@ foreach my $name (readdir DH) {
 	if (!($name eq ".") && !($name eq "..")) {
 		my $full_path = $dir."/".$name;
 		if (-d $full_path) { # is a directory
-			my $com = $run_script_path.$script." $full_path $ref_genome $use_checkpoint  $step \n";
+			my $com = $run_script_path.$script." $full_path $ref_genome $step \n";
 			print $com, "\n";
 			system( $com );
 		}

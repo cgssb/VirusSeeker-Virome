@@ -12,7 +12,6 @@
 # VirusOnly-database, MegaBLAST NT, BLAST NT, NR  steps.
 # changed number of sequence files at each step to decrease number of job slots
 # requested. 
-# added checkpointing at all necessary steps.
 ##################################################################################
 
 use strict;
@@ -35,7 +34,7 @@ my $normal = "\e[0m";
 This script will run the Metagenomic pipeline use Slurm Workload Manager.
 
 Pipeline version: $version
-$yellow		Usage: perl $0 <sample_folder><ref genome><use checkpointing> <step_number> [workdir] $normal
+$yellow		Usage: perl $0 <sample_folder><ref genome> <step_number> [workdir] $normal
 
 <sample_folder> = full path of the folder holding files for the sample
 <ref genome> = 1. Human genome
@@ -43,7 +42,6 @@ $yellow		Usage: perl $0 <sample_folder><ref genome><use checkpointing> <step_num
                3. Worm (C. elegans, C. briggsae)
                4. Worm (C. brenneri)
                5. Mouse lemur (Microcebus_murinus)
-<use checkpointing> = 1. yes, 0. no
 
 [workdir] = working directory (default: ./workdir/)
 
@@ -99,8 +97,8 @@ $red	[37]  Generate phage report
 $normal
 OUT
 
-die $usage unless scalar @ARGV >= 4;
-my ($sample_dir, $ref_genome_choice, $use_checkpoint,  $step_number, $workdir) = @ARGV;
+die $usage unless scalar @ARGV >= 3;
+my ($sample_dir, $ref_genome_choice, $step_number, $workdir) = @ARGV;
 die $usage unless (($step_number >= 0)&&($step_number <= 38)) ;
 
 if (! $workdir or $workdir eq "") {
@@ -697,12 +695,19 @@ sub fastqtofasta{
 #######################################################################################
 # This step will cluster sequences using CD-HIT to reduce redundancy.
 sub run_CDHIT{
-	# this is the job script
-	my $job_script = $job_files_dir."/j5_".$sample_name."_CDHIT_script.sh";
-	open(STCH, ">$job_script") or die $!;
-	chmod 0755, $job_script;
-
+	# here to submit
+	$current_job_file1 = "j5_".$sample_name."_CDHIT.sh";
+	open(STCH, ">$job_files_dir/$current_job_file1") or die $!;
 	print STCH "#!/bin/bash\n";         
+#	print STCH "#SBATCH --mem-per-cpu=20G\n";
+	print STCH "#SBATCH --mem=20G\n"; # request total memory of 20G
+	print STCH "#SBATCH --cpus-per-task=8\n"; # request 8 CPU
+	print STCH "#SBATCH --error=".$SLURM_files_dir."/".$current_job_file1.".error\n";
+	print STCH "#SBATCH --output=".$SLURM_files_dir."/".$current_job_file1.".out\n";
+	if (!$step_number) {
+		print STCH "#SBATCH --depend=afterok:$last_jobid\n";
+	}
+	print STCH "module load cd-hit\n";
 	print STCH "CDHIT_IN=${workdir}"."/".$sample_name.".RemoveAdapter.stitched.prinseq.fasta \n";
 	print STCH "CDHIT_OUT=${workdir}"."/".$sample_name.".QCed.cdhit.fa \n";
 	print STCH "CDHIT_REPORT=".${workdir}."/".$sample_name.".RemoveAdapter.stitched.prinseq.cdhitReport\n";
@@ -751,28 +756,6 @@ sub run_CDHIT{
 	print STCH "	fi\n";
 	print STCH "fi\n";
 	close STCH;
-
-	# here to submit
-	$current_job_file1 = "j5_".$sample_name."_CDHIT.sh";
-	open(STCH, ">$job_files_dir/$current_job_file1") or die $!;
-	print STCH "#!/bin/bash\n";         
-#	print STCH "#SBATCH --mem-per-cpu=20G\n";
-	print STCH "#SBATCH --mem=20G\n"; # request total memory of 20G
-	print STCH "#SBATCH --cpus-per-task=8\n"; # request 8 CPU
-	print STCH "#SBATCH --error=".$SLURM_files_dir."/".$current_job_file1.".error\n";
-	print STCH "#SBATCH --output=".$SLURM_files_dir."/".$current_job_file1.".out\n";
-	if (!$step_number) {
-		print STCH "#SBATCH --depend=afterok:$last_jobid\n";
-	}
-	print STCH "module load checkpoint\n";
-	print STCH "module load cd-hit\n";
-	if ($use_checkpoint) { 
-		print STCH "checkpoint bash  $job_script \n";
-	}
-	else {
-		print STCH " bash  $job_script \n";
-	}
-	close STCH;
     $last_jobid = `sbatch $job_files_dir/$current_job_file1 | awk '{ print \$NF }'`;
 }
 
@@ -788,7 +771,6 @@ sub run_Tantan{
 		print STCH "#SBATCH --depend=afterok:$last_jobid\n";
 	}
 	print STCH "module load tantan\n";
-	print STCH "#!/bin/bash\n\n";
 	print STCH "TANTAN_IN=${workdir}"."/".$sample_name.".QCed.cdhit.fa \n";
 	print STCH "TANTAN_OUT=${workdir}"."/".$sample_name.".QCed.cdhit.tantan.fa \n";
 
@@ -819,7 +801,6 @@ sub seq_QC_TANTAN {
 	if (!$step_number) {
 		print STCH "#SBATCH --depend=afterok:$last_jobid\n";
 	}
-	print STCH "SAMPLE_DIR=".$sample_dir."\n";
 
 	print STCH "if [ ! -e $status_log/j7_QC_TANTAN_finished ]\n";
 	print STCH "then\n";
@@ -851,7 +832,6 @@ sub prepare_for_RM {
 		print STCH "#SBATCH --depend=afterok:$last_jobid\n";
 	}
 	print STCH "IN=".${sample_name}.".QCed.cdhit.tantan.goodSeq.fa\n";
-	print STCH "SAMPLE_DIR=".$sample_dir."\n";
 	print STCH "RM_DIR=".$repeatmasker_dir."\n\n";
 
 	print STCH "if [ ! -e $status_log/j8_finished_prepare_repeatmasker_split ]\n";
@@ -887,37 +867,6 @@ sub prepare_for_RM {
 ########################################################################################
 # submit RepeatMasker job array
 sub submit_job_array_RM {
-	# this is the job script
-	my $job_script = $job_files_dir."/j9_".$sample_name."_RM_script.sh";
-	open(JSTCH, ">$job_script") or die $!;
-	chmod 0755, $job_script;
-
-	print JSTCH "RMOUT=$repeatmasker_dir/${sample_name}.QCed.cdhit.tantan.goodSeq.fa_file\${SLURM_ARRAY_TASK_ID}.fasta.masked\n";#
-	print JSTCH "RMIN=$repeatmasker_dir/${sample_name}.QCed.cdhit.tantan.goodSeq.fa_file\${SLURM_ARRAY_TASK_ID}.fasta\n";#
-	print JSTCH "RMOTHER=$repeatmasker_dir/${sample_name}.QCed.cdhit.tantan.goodSeq.fa_file\${SLURM_ARRAY_TASK_ID}.fasta.out\n";
-	print JSTCH "RM_dir=".$repeatmasker_dir."\n\n";
-	
-	print JSTCH 'if [ -e $RMIN ]',"\n"; # input file exist
-	print JSTCH "then\n";
-	print JSTCH '	if [ ! -e $RMOTHER ]',"\n"; # don't have RepeatMasker output ".out" file, means RepeatMasker never ran or finished
-	print JSTCH "	then\n";
-	print JSTCH "		$repeat_masker -pa 4 \$RMIN \n"; # run RepeatMasker, -pa number of processors to use
-	print JSTCH '     	CHECK=$?',"\n"; # if finished correctly the value will be 0
-	print JSTCH "		if [ \${CHECK} -ne 0 ] \n"; 
-	print JSTCH "		then\n";
-	print JSTCH "			echo \"Fatal Error at RepeatMasker.\"  \n";
-	print JSTCH "			exit 1\n"; 
-	# if finished succussfully, make log file
-	print JSTCH "		fi\n";
-	print JSTCH "	fi\n\n";
-
- 	print JSTCH '	if [ ! -e $RMOUT ]',"\n"; #sometimes repeatmasker does not find any repeat in input files, in these cases no .masked file will be generated.
-	print JSTCH "	then\n";
-	print JSTCH '		cp ${RMIN} ${RMOUT}',"\n";
-	print JSTCH "	fi\n";
-	print JSTCH "fi\n";
-	close JSTCH;
-
 	# here to submit
 	$current_job_file1 = "j9_".$sample_name."_RM.sh";
 	open(STCH, ">$job_files_dir/$current_job_file1") or die $!;
@@ -931,16 +880,35 @@ sub submit_job_array_RM {
 	if (!$step_number) {
 		print STCH "#SBATCH --depend=afterok:$last_jobid\n";
 	}
-	print STCH "module load checkpoint\n";
 	print STCH "module load ncbi-blast \n";
 	print STCH "module load repeatmasker\n";
 	print STCH "set -x\n";
-	if ($use_checkpoint) { 
-		print STCH "checkpoint bash  $job_script \n";
-	}
-	else {
-		print STCH " bash  $job_script \n";
-	}
+
+
+	print STCH "RMOUT=$repeatmasker_dir/${sample_name}.QCed.cdhit.tantan.goodSeq.fa_file\${SLURM_ARRAY_TASK_ID}.fasta.masked\n";#
+	print STCH "RMIN=$repeatmasker_dir/${sample_name}.QCed.cdhit.tantan.goodSeq.fa_file\${SLURM_ARRAY_TASK_ID}.fasta\n";#
+	print STCH "RMOTHER=$repeatmasker_dir/${sample_name}.QCed.cdhit.tantan.goodSeq.fa_file\${SLURM_ARRAY_TASK_ID}.fasta.out\n";
+	print STCH "RM_dir=".$repeatmasker_dir."\n\n";
+	
+	print STCH 'if [ -e $RMIN ]',"\n"; # input file exist
+	print STCH "then\n";
+	print STCH '	if [ ! -e $RMOTHER ]',"\n"; # don't have RepeatMasker output ".out" file, means RepeatMasker never ran or finished
+	print STCH "	then\n";
+	print STCH "		$repeat_masker -pa 4 \$RMIN \n"; # run RepeatMasker, -pa number of processors to use
+	print STCH '     	CHECK=$?',"\n"; # if finished correctly the value will be 0
+	print STCH "		if [ \${CHECK} -ne 0 ] \n"; 
+	print STCH "		then\n";
+	print STCH "			echo \"Fatal Error at RepeatMasker.\"  \n";
+	print STCH "			exit 1\n"; 
+	# if finished succussfully, make log file
+	print STCH "		fi\n";
+	print STCH "	fi\n\n";
+
+ 	print STCH '	if [ ! -e $RMOUT ]',"\n"; #sometimes repeatmasker does not find any repeat in input files, in these cases no .masked file will be generated.
+	print STCH "	then\n";
+	print STCH '		cp ${RMIN} ${RMOUT}',"\n";
+	print STCH "	fi\n";
+	print STCH "fi\n";
 	close STCH;
 
 	$last_jobid = `sbatch $job_files_dir/$current_job_file1 | awk '{ print \$NF }'`;
@@ -956,7 +924,6 @@ sub seq_RMQC {
 	if (!$step_number) {
 		print STCH "#SBATCH --depend=afterok:$last_jobid\n";
 	}
-	print STCH "SAMPLE_DIR=".${workdir}."\n";
 	print STCH "QC_Record=".${workdir}."/".$sample_name.".RepeatMasker_check.txt\n\n";
 
 	print STCH "if [ ! -e $status_log/j10_RMQC_output_finished ]\n";
@@ -979,36 +946,6 @@ sub seq_RMQC {
 
 ################################################################################
 sub map_Host_Reference_Genome_BWA{
-	# this is the job script
-	my $job_script = $job_files_dir."/j11_".$sample_name."_BWA_map_host_genome_script.sh";
-	open(JSTCH, ">$job_script") or die $!;
-	chmod 0755, $job_script;
-	print JSTCH "#!/bin/bash\n";         
-	print JSTCH "IN=${workdir}"."/".$sample_name.".RepeatMasker.goodSeq.unmasked.fa\n";
-	print JSTCH "OUTFILE=${workdir}"."/".$sample_name.".RepeatMasker.goodSeq.RefGenome.mapped.sam\n";
-	print JSTCH "TIMEFILE=${workdir}"."/".$sample_name.".RepeatMasker.goodSeq.RefGenome.map_time.txt\n";
-
-	# Check if mapping finished successfully. If finished successfully, 
-	# resubmitting this job will skip mapping step and will not overwrite 
-	# the results.
-	print JSTCH "if [ ! -e $status_log/j11_BWA_map_host_genome_finished ]\n";
-	print JSTCH "then\n";
-	print JSTCH "	date > \${TIMEFILE}\n";
-	# use -L 100,100 to reduce spuriously mapped sequences
-	print JSTCH "	$bwa mem -L 100,100 -k 15 -t \$SLURM_CPUS_PER_TASK  $reference_genome  \${IN} >  \${OUTFILE}  \n";
-	print JSTCH "	OUT=\$?\n"; 
-	print JSTCH '	if [ ${OUT} -ne 0 ]',"\n"; # did not finish successfully
-	print JSTCH "	then\n";
-	print JSTCH "		echo \"Fatal Error trying to run bwa.\"  \n";
-	print JSTCH "		exit 1\n"; 
-	print JSTCH "	else\n";
-	print JSTCH "		touch $status_log/j11_BWA_map_host_genome_finished\n";
-	print JSTCH "	fi\n";
-	#if mapping finished succussfully, make a file named finished
-	print JSTCH "	date >> \${TIMEFILE}\n";
-	print JSTCH "fi\n\n";
-	close JSTCH;
-
 	# here to submit
 	$current_job_file1 = "j11_".$sample_name."_BWA_map_host_genome.sh";
 	open(STCH, ">$job_files_dir/$current_job_file1") or die $!;
@@ -1021,14 +958,32 @@ sub map_Host_Reference_Genome_BWA{
 	if (!$step_number) {
 		print STCH "#SBATCH --depend=afterok:$last_jobid\n";
 	}
-	print STCH "module load checkpoint\n";
 	print STCH "module load bwa\n";
-	if ($use_checkpoint) { 
-		print STCH "checkpoint bash  $job_script \n";
-	}
-	else {
-		print STCH " bash  $job_script \n";
-	}
+
+	print STCH "IN=${workdir}"."/".$sample_name.".RepeatMasker.goodSeq.unmasked.fa\n";
+	print STCH "OUTFILE=${workdir}"."/".$sample_name.".RepeatMasker.goodSeq.RefGenome.mapped.sam\n";
+	print STCH "TIMEFILE=${workdir}"."/".$sample_name.".RepeatMasker.goodSeq.RefGenome.map_time.txt\n";
+
+	# Check if mapping finished successfully. If finished successfully, 
+	# resubmitting this job will skip mapping step and will not overwrite 
+	# the results.
+	print STCH "if [ ! -e $status_log/j11_BWA_map_host_genome_finished ]\n";
+	print STCH "then\n";
+	print STCH "	date > \${TIMEFILE}\n";
+	# use -L 100,100 to reduce spuriously mapped sequences
+	print STCH "	$bwa mem -L 100,100 -k 15 -t \$SLURM_CPUS_PER_TASK  $reference_genome  \${IN} >  \${OUTFILE}  \n";
+	print STCH "	OUT=\$?\n"; 
+	print STCH '	if [ ${OUT} -ne 0 ]',"\n"; # did not finish successfully
+	print STCH "	then\n";
+	print STCH "		echo \"Fatal Error trying to run bwa.\"  \n";
+	print STCH "		exit 1\n"; 
+	print STCH "	else\n";
+	print STCH "		touch $status_log/j11_BWA_map_host_genome_finished\n";
+	print STCH "	fi\n";
+	#if mapping finished succussfully, make a file named finished
+	print STCH "	date >> \${TIMEFILE}\n";
+	print STCH "fi\n\n";
+
 	close STCH;
     $last_jobid = `sbatch $job_files_dir/$current_job_file1 | awk '{ print \$NF }'`;
 }
@@ -1094,7 +1049,6 @@ sub split_for_MegaBLAST_RefGenome{
 		print STCH "#SBATCH --depend=afterok:$last_jobid\n";
 	}
 	print STCH "IN=".${sample_name}.".RepeatMasker.goodSeq.RefGenome.unmapped.masked.fasta\n\n";
-	print STCH "SAMPLE_DIR=".${workdir}."\n";
 	print STCH "MegaBLAST_DIR=".$MegaBLAST_dir_host."\n";
 
 	print STCH "if [ ! -e $status_log/j13_split_for_MegaBLAST_finished ]\n";
@@ -1133,10 +1087,21 @@ sub split_for_MegaBLAST_RefGenome{
 #######################################################################################
 # Run MegaBlast against reference genome to remove more host sequences.
 sub MegaBLAST_RefGenome{
-	# this is the job script
-	my $job_script = $job_files_dir."/j14_".$sample_name."_MegaBLAST_HOST_script.sh";
-	open(STCH, ">$job_script") or die $!;
-	chmod 0755, $job_script;
+ 	# here to submit
+	$current_job_file1 = "j14_".$sample_name."_MegaBLAST_HOST.sh";
+	open(STCH, ">$job_files_dir/$current_job_file1") or die $!;
+	print STCH "#!/bin/bash\n";  
+	print STCH "#SBATCH --mem=20G\n";
+	print STCH "#SBATCH --cpus-per-task=8\n";
+#	print STCH "#SBATCH --mem-per-cpu=16G\n";
+	if (!$step_number) {
+		print STCH "#SBATCH --depend=afterok:$last_jobid\n";
+	}
+	print STCH "#SBATCH --array=1-$file_number_of_MegaBLAST_host\n";
+	print STCH "#SBATCH --error=".$SLURM_files_dir."/".$current_job_file1.".%A_%a.error \n";
+	print STCH "#SBATCH --output=".$SLURM_files_dir."/".$current_job_file1.".%A_%a.out \n";
+	print STCH "module load ncbi-blast\n";
+	print STCH "set -x\n";
 
 	print STCH "BlastNOUT=$MegaBLAST_dir_host/${sample_name}.RepeatMasker.goodSeq.RefGenome.unmapped.masked.fasta_file".'${SLURM_ARRAY_TASK_ID}',".MegaBLAST.out\n"; #full path
 	print STCH "QUERY=$MegaBLAST_dir_host/${sample_name}.RepeatMasker.goodSeq.RefGenome.unmapped.masked.fasta_file".'${SLURM_ARRAY_TASK_ID}',".fasta\n\n";
@@ -1173,31 +1138,7 @@ sub MegaBLAST_RefGenome{
 	print STCH "		fi\n";
 	print STCH "	fi\n";
 	print STCH "fi";
-	close STCH;
 
- 	# here to submit
-	$current_job_file1 = "j14_".$sample_name."_MegaBLAST_HOST.sh";
-	open(STCH, ">$job_files_dir/$current_job_file1") or die $!;
-	print STCH "#!/bin/bash\n";  
-	print STCH "#SBATCH --mem=20G\n";
-	print STCH "#SBATCH --cpus-per-task=8\n";
-#	print STCH "#SBATCH --mem-per-cpu=16G\n";
-	if (!$step_number) {
-		print STCH "#SBATCH --depend=afterok:$last_jobid\n";
-	}
-	print STCH "#SBATCH --array=1-$file_number_of_MegaBLAST_host\n";
-	print STCH "#SBATCH --error=".$SLURM_files_dir."/".$current_job_file1.".%A_%a.error \n";
-	print STCH "#SBATCH --output=".$SLURM_files_dir."/".$current_job_file1.".%A_%a.out \n";
-	print STCH "module load ncbi-blast\n";
-	print STCH "module load checkpoint\n";
-	print STCH "set -x\n";
-
-	if ($use_checkpoint) { 
-		print STCH "checkpoint bash  $job_script \n";
-	}
-	else {
-		print STCH " bash  $job_script \n";
-	}
 	close STCH;
 
 	$last_jobid = `sbatch $job_files_dir/$current_job_file1 | awk '{ print \$NF }'`;
@@ -1277,7 +1218,6 @@ sub extract_RefGenomeFiltered_reads{
 	print STCH "then\n";
 
 	# file contains reads left for further analysis
-	print STCH "	SAMPLE_DIR=".${workdir}."\n";
 	print STCH "	RefGenomeFiltered=".$sample_name.".RefGenomeFiltered.fa\n\n";
 	print STCH "	QC_Record=".${workdir}."/".$sample_name.".MegaBLAST_HOST_finish_check.txt\n\n";
 
@@ -1346,10 +1286,20 @@ sub split_for_BLASTN_VIRUSDB{
 
 #####################################################################################
 sub submit_job_array_BLASTN_VIRUSDB{
-	# this is the job script
-	my $job_script = $job_files_dir."/j18_".$sample_name."_BLASTN_VIRUSDB_run_script.sh";
-	open(STCH, ">$job_script") or die $!;
-	chmod 0755, $job_script;
+ 	# here to submit
+	$current_job_file1 = "j18_".$sample_name."_BLASTN_VIRUSDB_run.sh";
+	open(STCH, ">$job_files_dir/$current_job_file1") or die $!;
+	print STCH "#!/bin/bash\n";  
+	print STCH "#SBATCH --mem=16G\n";
+	print STCH "#SBATCH --cpus-per-task=4\n";
+	print STCH "#SBATCH --array=1-$file_number_of_BLASTN_VIRUSDB\n";
+	if (!$step_number) {
+		print STCH "#SBATCH --depend=afterok:$last_jobid\n";
+	}
+	print STCH "#SBATCH --error=".$SLURM_files_dir."/".$current_job_file1.".%A_%a.error \n";
+	print STCH "#SBATCH --output=".$SLURM_files_dir."/".$current_job_file1.".%A_%a.out \n";
+	print STCH "module load ncbi-blast\n";
+#	print STCH "set -x\n";
 
 	print STCH "BLASTN_VIRUSDB_DIR=".${workdir}."/".$sample_name.$BLASTN_VIRUSDB_DIR_SUFFIX."\n";
 	print STCH "BlastNOUT=",'${BLASTN_VIRUSDB_DIR}',"/",$sample_name.".RefGenomeFiltered.fa_file".'${SLURM_ARRAY_TASK_ID}',".blastnv.out\n"; # full path
@@ -1384,29 +1334,6 @@ sub submit_job_array_BLASTN_VIRUSDB{
 	print STCH "		fi\n";
 	print STCH "	fi\n";
 	print STCH "fi";
-	close STCH;
-
- 	# here to submit
-	$current_job_file1 = "j18_".$sample_name."_BLASTN_VIRUSDB_run.sh";
-	open(STCH, ">$job_files_dir/$current_job_file1") or die $!;
-	print STCH "#!/bin/bash\n";  
-	print STCH "#SBATCH --mem=16G\n";
-	print STCH "#SBATCH --cpus-per-task=4\n";
-	print STCH "#SBATCH --array=1-$file_number_of_BLASTN_VIRUSDB\n";
-	if (!$step_number) {
-		print STCH "#SBATCH --depend=afterok:$last_jobid\n";
-	}
-	print STCH "#SBATCH --error=".$SLURM_files_dir."/".$current_job_file1.".%A_%a.error \n";
-	print STCH "#SBATCH --output=".$SLURM_files_dir."/".$current_job_file1.".%A_%a.out \n";
-	print STCH "module load ncbi-blast\n";
-	print STCH "module load checkpoint\n";
-#	print STCH "set -x\n";
-	if ($use_checkpoint) { 
-		print STCH "checkpoint bash  $job_script \n";
-	}
-	else {
-		print STCH " bash  $job_script \n";
-	}
 
 	close STCH;
 	$last_jobid = `sbatch $job_files_dir/$current_job_file1 | awk '{ print \$NF }'`;
@@ -1481,7 +1408,6 @@ sub split_for_BLASTX_VIRUSDB {
 	if (!$step_number) {
 		print STCH "#SBATCH --depend=afterok:$last_jobid\n";
 	}
-	print STCH "SAMPLE_DIR=".${workdir}."\n";
 	print STCH "BLASTX_VIRUSDB_DIR=".${workdir}."/".$sample_name.$BLASTX_VIRUSDB_DIR_SUFFIX."\n";
 	print STCH "BLASTN_VIRUSDB_Filtered_fa=".$sample_name.".BLASTN_VIRUSDB_Filtered.fa\n";
 	print STCH "BLASTN_VIRUSDB_Hit_fa=".$sample_name.".BLASTN_VIRUSDB_HIT.fa\n";
@@ -1554,10 +1480,21 @@ sub split_for_BLASTX_VIRUSDB {
 #####################################################################################
 # run blastx againt virus-only databse
 sub submit_job_array_BLASTX_VIRUSDB{
-	# this is the job script
-	my $job_script = $job_files_dir."/j21_".$sample_name."_BX_VIRUSDB_script.sh";
-	open(STCH, ">$job_script") or die $!;
-	chmod 0755, $job_script;
+ 	# here to submit
+	$current_job_file1 = "j21_".$sample_name."_BX_VIRUSDB.sh";
+	open(STCH, ">$job_files_dir/$current_job_file1") or die $!;
+	print STCH "#!/bin/bash\n";  
+	print STCH "#SBATCH --mem=16G\n";
+	print STCH "#SBATCH --cpus-per-task=4\n"; # request 4 CPU
+	print STCH "#SBATCH --output=".$SLURM_files_dir."/".$current_job_file1.".%A_%a.out \n";
+	print STCH "#SBATCH --error=".$SLURM_files_dir."/".$current_job_file1.".%A_%a.error \n";
+	print STCH "#SBATCH --array=1-$file_number_of_BLASTX_VIRUSDB\n";
+	if (!$step_number) {
+		print STCH "#SBATCH --depend=afterok:$last_jobid\n";
+	}
+	print STCH "module load ncbi-blast\n";
+#	print STCH "set -x\n";
+
 
 	print STCH "VIRUS_DIR=".${workdir}."/".$sample_name.$BLASTX_VIRUSDB_DIR_SUFFIX."\n";
 	print STCH "BLASTX_VIRUSDB_OUT=",'${VIRUS_DIR}',"/",$sample_name.".BLASTN_VIRUSDB_Filtered.fa_file".'${SLURM_ARRAY_TASK_ID}',".BLASTX_VIRUSDB.out\n";#full path
@@ -1593,29 +1530,9 @@ sub submit_job_array_BLASTX_VIRUSDB{
 	print STCH "		fi\n";
 	print STCH "	fi\n";
 	print STCH "fi\n";
-	close STCH;
-	
- 	# here to submit
-	$current_job_file1 = "j21_".$sample_name."_BX_VIRUSDB.sh";
-	open(STCH, ">$job_files_dir/$current_job_file1") or die $!;
-	print STCH "#!/bin/bash\n";  
-	print STCH "#SBATCH --mem=16G\n";
-	print STCH "#SBATCH --cpus-per-task=4\n"; # request 4 CPU
-	print STCH "#SBATCH --output=".$SLURM_files_dir."/".$current_job_file1.".%A_%a.out \n";
-	print STCH "#SBATCH --error=".$SLURM_files_dir."/".$current_job_file1.".%A_%a.error \n";
-	print STCH "#SBATCH --array=1-$file_number_of_BLASTX_VIRUSDB\n";
-	if (!$step_number) {
-		print STCH "#SBATCH --depend=afterok:$last_jobid\n";
-	}
-	print STCH "module load ncbi-blast\n";
-	print STCH "module load checkpoint\n";
-#	print STCH "set -x\n";
-	if ($use_checkpoint) { 
-		print STCH "checkpoint bash  $job_script \n";
-	}
-	else {
-		print STCH " bash  $job_script \n";
-	}
+
+
+
 	close STCH;
 
 	$last_jobid = `sbatch $job_files_dir/$current_job_file1 | awk '{ print \$NF }'`;
@@ -1687,7 +1604,6 @@ sub pool_seq_for_mapping_Bacteria {
 	if (!$step_number) {
 		print STCH "#SBATCH --depend=afterok:$last_jobid\n";
 	}
-	print STCH "SAMPLE_DIR=".${workdir}."\n";
 	print STCH "VIRUSDB_HIT_all=".$sample_name."_VIRUSDB_HIT.fa\n";
 	print STCH "BLASTN_VIRUSDB_Hit_fa=".$sample_name.".BLASTN_VIRUSDB_HIT.fa\n";
 	print STCH "BLASTX_VIRUSDB_Hit_fa=".$sample_name.".BLASTX_VIRUSDB_HIT.fa\n";
@@ -1870,7 +1786,6 @@ sub split_for_MegaBLAST_NT{
 	if (!$step_number) {
 		print STCH "#SBATCH --depend=afterok:$last_jobid\n";
 	}
-	print STCH "SAMPLE_DIR=".${workdir}."\n";
 	print STCH "MegaBLAST_DIR=".$MegaBLAST_dir_NT."\n";
 	print STCH "IN=".$sample_name."_VIRUSDB_HIT_Bacteria_unmapped_masked.fasta\n\n";
 
@@ -1904,10 +1819,22 @@ sub split_for_MegaBLAST_NT{
 #########################################################################################
 # MegaBLAST against full NT to quickly remove false positives
 sub submit_job_array_MegaBLAST_NT {
- 	# this is the job script
-	my $job_script = $job_files_dir."/j27_".$sample_name."_MegaBLAST_NT_script.sh";
-	open(STCH, ">$job_script") or die $!;
-	chmod 0755, $job_script;
+ 	# here to submit
+	$current_job_file1 = "j27_".$sample_name."_MegaBLAST_NT.sh";
+	open(STCH, ">$job_files_dir/$current_job_file1") or die $!;
+	print STCH "#!/bin/bash\n"; 
+ 	print STCH "#SBATCH --mem=48G\n"; # request total memory of 24G
+	print STCH "#SBATCH --cpus-per-task=8\n"; # request 8 CPU
+#	print STCH "#SBATCH --mem-per-cpu=20G\n";
+	print STCH "#SBATCH --array=1-$file_number_of_MegaBLAST_NT\n";
+	print STCH "#SBATCH --error=".$SLURM_files_dir."/".$current_job_file1.".%A_%a.error \n";
+	print STCH "#SBATCH --output=".$SLURM_files_dir."/".$current_job_file1.".%A_%a.out \n";
+	if (!$step_number) {
+		print STCH "#SBATCH --depend=afterok:$last_jobid\n";
+	}
+	print STCH "module load ncbi-blast\n";
+#	print STCH "set -x\n";
+
 
 	print STCH "BLAST_DIR=".$MegaBLAST_dir_NT."\n";
 	print STCH "QUERY=",'${BLAST_DIR}',"/".$sample_name."_VIRUSDB_HIT_Bacteria_unmapped_masked.fasta_file".'${SLURM_ARRAY_TASK_ID}'.".fasta\n";
@@ -1942,31 +1869,7 @@ sub submit_job_array_MegaBLAST_NT {
 	print STCH "		fi\n";
 	print STCH "	fi\n";
 	print STCH "fi";
-	close STCH;
 
- 	# here to submit
-	$current_job_file1 = "j27_".$sample_name."_MegaBLAST_NT.sh";
-	open(STCH, ">$job_files_dir/$current_job_file1") or die $!;
-	print STCH "#!/bin/bash\n"; 
- 	print STCH "#SBATCH --mem=48G\n"; # request total memory of 24G
-	print STCH "#SBATCH --cpus-per-task=8\n"; # request 8 CPU
-#	print STCH "#SBATCH --mem-per-cpu=20G\n";
-	print STCH "#SBATCH --array=1-$file_number_of_MegaBLAST_NT\n";
-	print STCH "#SBATCH --error=".$SLURM_files_dir."/".$current_job_file1.".%A_%a.error \n";
-	print STCH "#SBATCH --output=".$SLURM_files_dir."/".$current_job_file1.".%A_%a.out \n";
-	if (!$step_number) {
-		print STCH "#SBATCH --depend=afterok:$last_jobid\n";
-	}
-	print STCH "module load ncbi-blast\n";
-	print STCH "module load checkpoint\n";
-#	print STCH "set -x\n";
-
-	if ($use_checkpoint) { 
-		print STCH "checkpoint bash  $job_script \n";
-	}
-	else {
-		print STCH " bash  $job_script \n";
-	}
 	close STCH;
 
 	$last_jobid = `sbatch $job_files_dir/$current_job_file1 | awk '{ print \$NF }'`;
@@ -2090,10 +1993,20 @@ sub pool_split_for_BlastN{
 #####################################################################################
 
 sub submit_job_array_BLASTN{
-	# this is the job script
-	my $job_script = $job_files_dir."/j30_".$sample_name."_BN_script.sh";
-	open(STCH, ">$job_script") or die $!;
-	chmod 0755, $job_script;
+ 	# here to submit
+	$current_job_file1 = "j30_".$sample_name."_BN.sh";
+	open(STCH, ">$job_files_dir/$current_job_file1") or die $!;
+	print STCH "#!/bin/bash\n";         
+	print STCH "#SBATCH --mem=48G\n";
+	print STCH "#SBATCH --cpus-per-task=6\n";
+	print STCH "#SBATCH --array=1-$file_number_of_BLASTN\n";
+	print STCH "#SBATCH --error=".$SLURM_files_dir."/".$current_job_file1.".%A_%a.error \n";
+	print STCH "#SBATCH --output=".$SLURM_files_dir."/".$current_job_file1.".%A_%a.out \n";
+	if (!$step_number) {
+		print STCH "#SBATCH --depend=afterok:$last_jobid\n";
+	}
+	print STCH "module load ncbi-blast\n";
+#	print STCH "set -x\n";
 
 	print STCH "BN_DIR=".$BLASTN_NT_dir."\n";
 	print STCH "BlastNOUT=",'${BN_DIR}',"/",$sample_name.".VIRUSDB_HIT_MegaBLAST_NT_Filtered.fa_file".'${SLURM_ARRAY_TASK_ID}',".blastn.out\n";#full path
@@ -2128,29 +2041,8 @@ sub submit_job_array_BLASTN{
 	print STCH "		fi\n";
 	print STCH "	fi\n";
 	print STCH "fi\n";
-	close STCH;
 
- 	# here to submit
-	$current_job_file1 = "j30_".$sample_name."_BN.sh";
-	open(STCH, ">$job_files_dir/$current_job_file1") or die $!;
-	print STCH "#!/bin/bash\n";         
-	print STCH "#SBATCH --mem=48G\n";
-	print STCH "#SBATCH --cpus-per-task=6\n";
-	print STCH "#SBATCH --array=1-$file_number_of_BLASTN\n";
-	print STCH "#SBATCH --error=".$SLURM_files_dir."/".$current_job_file1.".%A_%a.error \n";
-	print STCH "#SBATCH --output=".$SLURM_files_dir."/".$current_job_file1.".%A_%a.out \n";
-	if (!$step_number) {
-		print STCH "#SBATCH --depend=afterok:$last_jobid\n";
-	}
-	print STCH "module load ncbi-blast\n";
-	print STCH "module load checkpoint\n";
-#	print STCH "set -x\n";
-	if ($use_checkpoint) { 
-		print STCH "checkpoint bash  $job_script \n";
-	}
-	else {
-		print STCH " bash  $job_script \n";
-	}
+
 	close STCH;
 
 	$last_jobid = `sbatch $job_files_dir/$current_job_file1 | awk '{ print \$NF }'`;
@@ -2224,7 +2116,6 @@ sub pool_split_for_BLASTX{
 	if (!$step_number) {
 		print STCH "#SBATCH --depend=afterok:$last_jobid\n";
 	}
-	print STCH "SAMPLE_DIR=".$sample_dir."\n";
 	print STCH "BX_DIR=".$BLASTX_NR_dir."\n";
 	print STCH "BNFiltered_fa=".$sample_name."_BLASTN_NT_Filtered.fa\n";
 	print STCH "QC_Record=".${workdir}."/".$sample_name.".BLAST_NT_check.txt\n\n";
@@ -2268,13 +2159,21 @@ sub pool_split_for_BLASTX{
 }
 
 #####################################################################################
-# this is script for job submission with checkpointing
+# this is script for job submission
 sub submit_job_array_BLASTX{
-	# this is the job script
-	my $job_script = $job_files_dir."/j33_".$sample_name."_BX_script.sh";
-	open(STCH, ">$job_script") or die $!;
-	chmod 0755, $job_script;
-
+	# here to submit
+	$current_job_file1 = "j33_".$sample_name."_BX.sh";
+	open(STCH, ">$job_files_dir/$current_job_file1") or die $!;
+	print STCH "#!/bin/bash\n";  
+	print STCH "#SBATCH --mem=8G\n";
+	print STCH "#SBATCH --cpus-per-task=8\n";
+	print STCH "#SBATCH --array=1-$file_number_of_BLASTX\n";
+	print STCH "#SBATCH --error=".$SLURM_files_dir."/".$current_job_file1.".%A_%a.error\n";
+	print STCH "#SBATCH --output=".$SLURM_files_dir."/".$current_job_file1.".%A_%a.out\n";
+	if (!$step_number) {
+		print STCH "#SBATCH --depend=afterok:$last_jobid\n";
+	}
+	print STCH "module load ncbi-blast\n";
 	print STCH "set -x\n";
 	print STCH "BX_DIR=".$BLASTX_NR_dir."\n";
 	print STCH "BlastXOUT=",'${BX_DIR}',"/",$sample_name."_BLASTN_NT_Filtered.fa_file".'${SLURM_ARRAY_TASK_ID}',".blastx.out\n";#full path
@@ -2309,31 +2208,8 @@ sub submit_job_array_BLASTX{
 	print STCH "		fi\n";
 	print STCH "	fi\n";
 	print STCH "fi\n"; 
-	close STCH;
-  
-	# here to submit
-	$current_job_file1 = "j33_".$sample_name."_BX.sh";
-	open(STCH, ">$job_files_dir/$current_job_file1") or die $!;
-	print STCH "#!/bin/bash\n";  
-	print STCH "#SBATCH --mem=50G\n";
-	print STCH "#SBATCH --cpus-per-task=8\n";
-	print STCH "#SBATCH --array=1-$file_number_of_BLASTX\n";
-	print STCH "#SBATCH --error=".$SLURM_files_dir."/".$current_job_file1.".%A_%a.error\n";
-	print STCH "#SBATCH --output=".$SLURM_files_dir."/".$current_job_file1.".%A_%a.out\n";
-	if (!$step_number) {
-		print STCH "#SBATCH --depend=afterok:$last_jobid\n";
-	}
-	print STCH "module load ncbi-blast\n";
-	print STCH "module load checkpoint\n";
-#	print STCH "module load checkpoint/test\n";
-	print STCH "set -x\n";
 
-	if ($use_checkpoint) { 
-		print STCH "checkpoint bash  $job_script \n";
-	}
-	else {
-		print STCH " bash  $job_script \n";
-	}
+
 	close STCH;
 
 	$last_jobid = `sbatch $job_files_dir/$current_job_file1 | awk '{ print \$NF }'`;
@@ -2406,7 +2282,6 @@ sub generate_assignment_report{
 	}
 	print STCH "module load bio-perl/1.007002\n";
 	print STCH "set -x\n";
-	print STCH "SAMPLE_DIR=".${workdir}."\n";
 	print STCH "REPORT=".${workdir}."/".$sample_name.".AssignmentReport\n";
 	print STCH "TIMEFILE=${workdir}"."/".$sample_name.".AssignmentReport_time.txt\n";
 	print STCH "QC_Record=".${workdir}."/".$sample_name.".BLASTX_NR_check.txt\n\n";
@@ -2485,7 +2360,6 @@ sub generate_phage_report{
 	}
 	print STCH "module load bio-perl/1.007002\n";
 	print STCH "set -x\n";
-	print STCH "SAMPLE_DIR=".${workdir}."\n";
 	print STCH "REPORT=".${workdir}."/".$sample_name.".PhageAssignmentReport\n";
 	print STCH "TIMEFILE=${workdir}"."/".$sample_name.".PhageAssignmentReport_time.txt\n";
 
