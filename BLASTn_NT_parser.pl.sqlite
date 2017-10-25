@@ -63,8 +63,8 @@ open (OUT, ">$outFile") or die "can not open file $outFile!\n";
 
 
 # get a Taxon from a Bio::DB::Taxonomy object
-my $dbh = Bio::DB::Taxonomy->new(-source => 'flatfile',
-		-directory=> "$TMPDIR",
+my $dbh = Bio::DB::Taxonomy->new(-source => 'sqlite',
+		-db=> ":memory:",
 		-nodesfile=> "$database_dir/nodes.dmp",
 		-namesfile=> "$database_dir/names.dmp",
 		);
